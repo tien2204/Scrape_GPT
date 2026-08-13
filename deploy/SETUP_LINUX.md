@@ -38,20 +38,24 @@ server and `scp` only `chrome_profile/` over separately (it's gitignored).
 
 ## 4. Set the Slack webhook URL
 
-Add to your shell profile (e.g. `~/.bashrc`) so it's available to cron too
-(cron does not read your shell profile by default — export it in the
-crontab line itself, or source it explicitly):
+Cron does not read your shell profile by default, so `SLACK_WEBHOOK_URL`
+needs to be made available to the cron command explicitly. Two options:
 
-    export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+**Option A — `.env` file (what `deploy/crontab.txt` uses):** create a
+`.env` file in the project root (never commit it — it's gitignored):
 
-If setting it only in `~/.bashrc`, prefix the cron command with sourcing
-that file, e.g.:
+    SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+
+and source it in the cron command itself:
+
+    */15 * * * * cd /path/to/project && set -a && . ./.env && set +a && ./deploy/run_with_xvfb.sh python3 check_billing.py >> cron.log 2>&1
+
+(matches `deploy/crontab.txt` verbatim — edit only the `cd` path)
+
+**Option B — shell profile:** add `export SLACK_WEBHOOK_URL="..."` to
+`~/.bashrc` and prefix the cron command with sourcing it instead:
 
     */15 * * * * cd /path/to/project && . ~/.bashrc && xvfb-run -a python3 check_billing.py >> cron.log 2>&1
-
-(or, with `deploy/run_with_xvfb.sh` in place of `xvfb-run -a` — see the
-note in step 1 — `. ~/.bashrc && ./deploy/run_with_xvfb.sh python3
-check_billing.py >> cron.log 2>&1`, matching `deploy/crontab.txt`)
 
 ## 5. Verify a manual run works
 
@@ -112,6 +116,15 @@ At 96 runs/day, `cron.log` grows indefinitely if left alone. Add a
   proof of a block on this server — Xvfb sessions here report SwiftShader
   even when headed mode passes cleanly; treat the page title and content
   check as authoritative, not the renderer string.
+- If `.env` sourcing silently fails under cron only (works fine when you
+  paste the same command into an interactive `bash` shell): cron runs jobs
+  under `/bin/sh` (often `dash`), and POSIX `.`/source only searches
+  `$PATH` for a bare filename — unlike bash's `source`, it does not fall
+  back to the current directory. `. .env` finds nothing under dash even
+  though the file is right there; the fix is the explicit relative path
+  `. ./.env`, which works under both. This is easy to test in isolation:
+  `/bin/sh -c 'cd /path/to/project && . .env'` fails with `not found`
+  even when `.env` exists, while `. ./.env` succeeds.
 - If the balance amount comes back missing (e.g. `extract_balance` raises
   "Could not find a dollar amount"), this is not a Cloudflare block — the
   "API credit balance" label renders slightly before the dollar figure
