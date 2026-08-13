@@ -75,3 +75,12 @@ def test_post_logs_non_2xx_response(mock_post, capsys):
     post_recovery("https://hooks.example.com/x", "7.99")
     captured = capsys.readouterr()
     assert "500" in captured.out
+
+
+@patch("slack_notifier.requests.post")
+def test_post_balance_update_invoice_line_uses_receipt_emoji(mock_post):
+    mock_post.return_value = _mock_response()
+    invoice = {"invoice_number": "INV-1", "status": "Paid", "amount": "$5.00", "created": "2026-01-01"}
+    post_balance_update("https://hooks.example.com/x", "7.99", "7.99", [invoice])
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert "\U0001F9FE New invoice: INV-1 — $5.00 — Paid" in text

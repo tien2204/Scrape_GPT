@@ -16,7 +16,7 @@ def post_balance_update(webhook_url: str, balance: str, previous_balance: str | 
         lines.append(f"💰 API credit balance: ${balance} (was ${previous_balance})")
     for invoice in new_invoices:
         lines.append(
-            f"🧿 New invoice: {invoice['invoice_number']} — {invoice['amount']} — {invoice['status']}"
+            f"🧾 New invoice: {invoice['invoice_number']} — {invoice['amount']} — {invoice['status']}"
         )
     if not lines:
         return
