@@ -702,20 +702,30 @@ git commit -m "docs: add Linux cron deployment files and runbook"
 
 This task has no automated steps — it requires real SSH access to the user's Linux GPU server, the real Slack webhook, and the real `chrome_profile/` session, none of which any subagent has. It mirrors Task 8 from the Windows branch's plan.
 
-- [ ] **Step 1: Follow `deploy/SETUP_LINUX.md` steps 1–4**
+- [x] **Step 1: Follow `deploy/SETUP_LINUX.md` steps 1–4**
 
 Install `xvfb`, copy the project and `chrome_profile/` to the server, install Python dependencies, set `SLACK_WEBHOOK_URL`.
 
-- [ ] **Step 2: Run the manual verification from `deploy/SETUP_LINUX.md` step 5**
+`chrome_profile/` was already present on the server (not scp'd this session). `Xvfb` is present via the `billing-bot` conda env but without the `xvfb-run` wrapper script — worked around with `deploy/run_with_xvfb.sh`. `SLACK_WEBHOOK_URL` is **not yet set** anywhere on this server — Steps 4–5 below are blocked on that.
+
+- [x] **Step 2: Run the manual verification from `deploy/SETUP_LINUX.md` step 5**
 
 Run: `xvfb-run python3 check_billing.py`
 Expected: exits 0, `bot.log` shows `[SUCCESS]`, `state.json` is created, and — since it's the first-ever run — no Slack message appears in the channel.
 
+First attempt failed (see Step 3). After the fix, confirmed: exit 0, `bot.log` shows `[SUCCESS] balance=$7.99; history: 3 new invoice(s)`, `state.json` and CSVs written correctly.
+
 If it fails with a Cloudflare-style block or timeout even inside Xvfb, proceed to Step 3. Otherwise skip to Step 4.
 
-- [ ] **Step 3: Diagnose and fix if Xvfb doesn't pass Cloudflare on this server**
+- [x] **Step 3: Diagnose and fix if Xvfb doesn't pass Cloudflare on this server**
 
 This is the one open risk flagged in the design: Xvfb + real GPU rendering is expected to behave like a genuinely headed browser (which passed reliably on Windows), but it must be confirmed on the actual server. If it's still blocked, capture a screenshot (`page.screenshot(path="debug.png")`) and the page title after a `page.goto` + `wait_for_timeout(20000)`, the same way the Windows blocker was diagnosed, to see whether it's the Cloudflare interstitial or something else (e.g., Xvfb not actually attached, GPU not available to the virtual display). Fix `check_billing.py`'s `launch_persistent_context` call or the `Xvfb`/GPU driver setup based on what's found, then repeat Step 2.
+
+Found two bugs, not related to Xvfb/GPU capability itself:
+1. `check_billing.py` had `headless=True` (contradicting the plan's own constraint) — this alone caused every run to hit Cloudflare's "Just a moment..." interstitial, confirmed via page title/content and a WebGL renderer check. Fixed to `headless=False`.
+2. Separately, `fetch_balance_text` raced the async-rendered dollar amount (read the container right after the label appeared, before the `$X.XX` text existed). Fixed to wait for the `$X.XX` text itself.
+
+Both fixed and verified with 3 consecutive successful runs; see commit `9c3e5f4`.
 
 - [ ] **Step 4: Verify the change-detection and Slack messages**
 
@@ -725,7 +735,7 @@ Manually edit `state.json`'s `last_balance` to a different value (e.g. subtract 
 
 Temporarily rename `chrome_profile/` (e.g. to `chrome_profile_bak/`) to force a failure (the new empty profile will hit a login page), and run `xvfb-run python3 check_billing.py` twice in a row. Confirm the *first* run posts a Slack error alert and the *second* posts nothing (edge-triggered silence — `bot.log` still logs `[FAILURE]` both times, only Slack is silenced on the repeat). Then rename `chrome_profile_bak/` back to `chrome_profile/` and run once more — confirm it posts a recovery message to Slack.
 
-- [ ] **Step 6: Commit any fixes found in Step 3**
+- [x] **Step 6: Commit any fixes found in Step 3**
 
 ```bash
 git add browser_scraper.py check_billing.py
@@ -733,6 +743,8 @@ git commit -m "fix: adjust browser launch for Linux/Xvfb Cloudflare behavior"
 ```
 
 (Skip this commit if no changes were needed.)
+
+Committed as `9c3e5f4` (also includes `deploy/run_with_xvfb.sh` and the doc/crontab updates from the `xvfb-run`-wrapper gap found in Step 1).
 
 - [ ] **Step 7: Install the crontab and observe one real cycle**
 
