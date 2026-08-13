@@ -727,13 +727,17 @@ Found two bugs, not related to Xvfb/GPU capability itself:
 
 Both fixed and verified with 3 consecutive successful runs; see commit `9c3e5f4`.
 
-- [ ] **Step 4: Verify the change-detection and Slack messages**
+- [x] **Step 4: Verify the change-detection and Slack messages**
 
 Manually edit `state.json`'s `last_balance` to a different value (e.g. subtract 1 from the real balance), then re-run `xvfb-run python3 check_billing.py`. Confirm a "balance changed" Slack message appears in the channel with the correct old/new values, matching the format in Task 3.
 
-- [ ] **Step 5: Verify the failure/recovery edge behavior**
+Confirmed live in `#alert-imghub-credits`: edited `last_balance` to `"6.99"` then `"5.99"` across two runs, both times the real balance ($7.99) was re-fetched and `decide_action` returned `balance_update`. Slack messages posted and verified via search: "💰 API credit balance: $7.99 (was $6.99)" and "💰 API credit balance: $7.99 (was $5.99)", exact format match.
+
+- [x] **Step 5: Verify the failure/recovery edge behavior**
 
 Temporarily rename `chrome_profile/` (e.g. to `chrome_profile_bak/`) to force a failure (the new empty profile will hit a login page), and run `xvfb-run python3 check_billing.py` twice in a row. Confirm the *first* run posts a Slack error alert and the *second* posts nothing (edge-triggered silence — `bot.log` still logs `[FAILURE]` both times, only Slack is silenced on the repeat). Then rename `chrome_profile_bak/` back to `chrome_profile/` and run once more — confirm it posts a recovery message to Slack.
+
+Confirmed live: run 1 with the renamed profile took ~64s (fresh Chrome profile has more first-run overhead than the double-30s selector-timeout baseline — not an infinite hang, just needed >60s) and logged `[FAILURE] ... Session expired, run login_setup.py again`, posting exactly one "⚠️ Billing bot failing: ..." to `#alert-imghub-credits`. Run 2 (still failing) also logged `[FAILURE]` but posted nothing — edge-triggered silence confirmed via Slack search (only one failing-alert message exists in the window). After restoring `chrome_profile/`, run 3 succeeded in ~12s and posted "✅ Billing bot recovered — balance: $7.99", exact match.
 
 - [x] **Step 6: Commit any fixes found in Step 3**
 
@@ -746,6 +750,12 @@ git commit -m "fix: adjust browser launch for Linux/Xvfb Cloudflare behavior"
 
 Committed as `9c3e5f4` (also includes `deploy/run_with_xvfb.sh` and the doc/crontab updates from the `xvfb-run`-wrapper gap found in Step 1).
 
-- [ ] **Step 7: Install the crontab and observe one real cycle**
+- [x] **Step 7: Install the crontab and observe one real cycle**
 
 Follow `deploy/SETUP_LINUX.md` steps 6–7 (install crontab, set up `logrotate`). Watch `cron.log` through at least one real 15-minute cycle to confirm unattended operation works before considering this done.
+
+While wiring this up, found and fixed a real (not just theoretical) blocker: cron runs jobs under `/bin/sh` (dash on this box), and dash's `.`/source only searches `$PATH` for a bare filename — unlike bash's `source`, it doesn't fall back to the current directory. `. .env` silently failed under actual cron (worked fine when the same line was pasted into interactive bash, which is why it wasn't caught by earlier manual testing) — no output at all appeared in `bot.log` or `cron.log` for ~7 minutes despite cron being confirmed running. Root-caused by running the exact crontab line manually under `/bin/sh -c`. Fixed to `. ./.env` in `deploy/crontab.txt` and `deploy/SETUP_LINUX.md`.
+
+Per user request, verified the fix at an accelerated `* * * * *` (every-minute) schedule instead of waiting a full 15 minutes: 3 consecutive cron-triggered runs all logged `[SUCCESS]` (`05:44:11`, `05:45:11`, `05:46:31` UTC) with correct balance/history output and no manual intervention. Then switched to the real `*/15 * * * * cd /home/intern/Scrape_GPT && ...` line and confirmed `crontab -l` shows it installed.
+
+**Not done:** `logrotate` setup (`/etc/logrotate.d/billing-bot`) requires root and this session only has the unprivileged `intern` user (`sudo` demands a password) — needs to be added by whoever has root on this server. A full real 15-minute-interval cycle hasn't been separately observed (only the every-minute accelerated version and the schedule swap) — the executed command is identical either way, only the cron cadence field differs, but flagging this in case anyone wants to watch `cron.log` once more at the real interval before fully trusting it unattended.
