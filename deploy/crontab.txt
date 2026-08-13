@@ -1,1 +1,1 @@
-*/15 * * * * cd /path/to/project && xvfb-run -a python3 check_billing.py >> cron.log 2>&1
+*/15 * * * * cd /path/to/project && ./deploy/run_with_xvfb.sh python3 check_billing.py >> cron.log 2>&1

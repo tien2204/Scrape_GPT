@@ -10,6 +10,15 @@ which is reliably blocked by Cloudflare on OpenAI's billing pages).
     sudo apt install -y xvfb
     playwright install-deps chromium
 
+**Note on `xvfb-run`:** the `apt` package above includes the `xvfb-run`
+wrapper script. If Xvfb was instead installed into a conda environment
+(e.g. `conda install -c conda-forge xorg-xvfb-server`, as on this
+project's GPU server), only the `Xvfb` binary is present — `xvfb-run` is
+a separate Debian shell script, not part of X.org, and conda-forge does
+not ship it. In that case use `deploy/run_with_xvfb.sh` in place of
+`xvfb-run` everywhere below; it starts/stops an Xvfb display by hand and
+activates the `billing-bot` conda env before running the given command.
+
 ## 2. Copy the project and the authenticated session
 
 From your Windows machine, where you've already run `login_setup.py` and
@@ -40,9 +49,17 @@ that file, e.g.:
 
     */15 * * * * cd /path/to/project && . ~/.bashrc && xvfb-run -a python3 check_billing.py >> cron.log 2>&1
 
+(or, with `deploy/run_with_xvfb.sh` in place of `xvfb-run -a` — see the
+note in step 1 — `. ~/.bashrc && ./deploy/run_with_xvfb.sh python3
+check_billing.py >> cron.log 2>&1`, matching `deploy/crontab.txt`)
+
 ## 5. Verify a manual run works
 
     xvfb-run python3 check_billing.py
+
+Or, if using `deploy/run_with_xvfb.sh` (see the note in step 1):
+
+    ./deploy/run_with_xvfb.sh python3 check_billing.py
 
 Check `credit_balance_log.csv`, `billing_history.csv`, `state.json`, and
 `bot.log` were created/updated. Since this is the first-ever run, no Slack
@@ -79,7 +96,25 @@ At 96 runs/day, `cron.log` grows indefinitely if left alone. Add a
   the copied session has expired. The server has no display to log in
   again itself — go back to the Windows machine, run `login_setup.py`
   again, and `scp` the refreshed `chrome_profile/` over once more.
-- If runs fail with a Cloudflare-style timeout even inside Xvfb: confirm
-  Chrome is *not* being launched with `--headless` anywhere, and that
-  `--disable-blink-features=AutomationControlled` is present in
-  `check_billing.py`'s `launch_persistent_context` call.
+- If runs fail or take ~60s and finish with a timeout error even inside
+  Xvfb: confirm Chrome is *not* being launched with `--headless` anywhere
+  in `check_billing.py`'s `launch_persistent_context` call (this branch
+  was found live to be reliably blocked by a Cloudflare "Just a moment..."
+  interstitial when `headless=True`, even inside Xvfb — a true headed
+  launch against the virtual display passes), and that
+  `--disable-blink-features=AutomationControlled` is present.
+- To diagnose a block manually: run a small script that calls
+  `page.goto(...)`, `page.wait_for_timeout(8000)`, then checks
+  `page.title()` (a Cloudflare block shows `"Just a moment..."`),
+  `"API credit balance" in page.content()`, and `page.screenshot(path=...)`.
+  A WebGL renderer string containing `SwiftShader` (via
+  `gl.getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL)`) is not by itself
+  proof of a block on this server — Xvfb sessions here report SwiftShader
+  even when headed mode passes cleanly; treat the page title and content
+  check as authoritative, not the renderer string.
+- If the balance amount comes back missing (e.g. `extract_balance` raises
+  "Could not find a dollar amount"), this is not a Cloudflare block — the
+  "API credit balance" label renders slightly before the dollar figure
+  next to it. `browser_scraper.fetch_balance_text` waits for the `$X.XX`
+  text itself (not just the label) to avoid this race; if it recurs, the
+  page's DOM structure likely changed.

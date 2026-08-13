@@ -1,3 +1,5 @@
+import re
+
 from playwright.sync_api import Page
 
 OVERVIEW_URL = "https://platform.openai.com/settings/organization/billing/overview"
@@ -9,6 +11,9 @@ def fetch_balance_text(page: Page) -> str:
     balance_label = page.get_by_text("API credit balance", exact=False).first
     balance_label.wait_for(timeout=30000)
     container = balance_label.locator("xpath=ancestor::div[1]")
+    # The label renders before the balance amount (async), so wait for the
+    # dollar figure itself rather than just the label to avoid a race.
+    container.get_by_text(re.compile(r"\$[\d,]+\.\d{2}")).first.wait_for(timeout=30000)
     return container.inner_text()
 
 
