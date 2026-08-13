@@ -1,5 +1,5 @@
 import csv
-from csv_writer import append_balance_row, merge_invoice_rows
+from csv_writer import append_balance_row, merge_invoice_rows, get_new_invoice_rows
 
 
 def test_append_balance_row_creates_file_with_header(tmp_path):
@@ -53,3 +53,25 @@ def test_merge_invoice_rows_adds_only_new_rows(tmp_path):
     with open(csv_path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == 2
+
+
+def test_get_new_invoice_rows_returns_all_rows_when_file_missing(tmp_path):
+    csv_path = tmp_path / "history.csv"
+    row = {"invoice_number": "INV-1", "status": "Paid", "amount": "$5.00", "created": "2026-01-01"}
+    assert get_new_invoice_rows(str(csv_path), [row]) == [row]
+
+
+def test_get_new_invoice_rows_excludes_existing_invoice_numbers(tmp_path):
+    csv_path = tmp_path / "history.csv"
+    row1 = {"invoice_number": "INV-1", "status": "Paid", "amount": "$5.00", "created": "2026-01-01"}
+    row2 = {"invoice_number": "INV-2", "status": "Paid", "amount": "$6.00", "created": "2026-02-01"}
+    merge_invoice_rows(str(csv_path), [row1])
+    result = get_new_invoice_rows(str(csv_path), [row1, row2])
+    assert result == [row2]
+
+
+def test_get_new_invoice_rows_does_not_write_anything(tmp_path):
+    csv_path = tmp_path / "history.csv"
+    row = {"invoice_number": "INV-1", "status": "Paid", "amount": "$5.00", "created": "2026-01-01"}
+    get_new_invoice_rows(str(csv_path), [row])
+    assert not csv_path.exists()
