@@ -39,7 +39,10 @@ def run() -> int:
             balance_ok = True
             messages.append(f"balance=${balance}")
         except Exception as exc:
-            messages.append(f"balance fetch failed: {exc}")
+            if is_login_page(page.url):
+                messages.append("balance fetch failed: Session expired, run login_setup.py again")
+            else:
+                messages.append(f"balance fetch failed: {exc}")
 
         try:
             raw_rows = fetch_invoice_rows(page)
@@ -50,7 +53,10 @@ def run() -> int:
             history_ok = True
             messages.append(f"history: {added} new invoice(s)")
         except Exception as exc:
-            messages.append(f"history fetch failed: {exc}")
+            if is_login_page(page.url):
+                messages.append("history fetch failed: Session expired, run login_setup.py again")
+            else:
+                messages.append(f"history fetch failed: {exc}")
 
         context.close()
 
