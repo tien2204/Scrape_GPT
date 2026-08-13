@@ -5,16 +5,16 @@ HISTORY_URL = "https://platform.openai.com/settings/organization/billing/history
 
 
 def fetch_balance_text(page: Page) -> str:
-    page.goto(OVERVIEW_URL, wait_until="networkidle")
-    balance_label = page.get_by_text("API credit balance", exact=False)
-    balance_label.wait_for(timeout=15000)
-    container = balance_label.locator("xpath=..")
+    page.goto(OVERVIEW_URL, wait_until="domcontentloaded")
+    balance_label = page.get_by_text("API credit balance", exact=False).first
+    balance_label.wait_for(timeout=30000)
+    container = balance_label.locator("xpath=ancestor::div[1]")
     return container.inner_text()
 
 
 def fetch_invoice_rows(page: Page) -> list[list[str]]:
-    page.goto(HISTORY_URL, wait_until="networkidle")
-    page.get_by_text("Showing invoices", exact=False).wait_for(timeout=15000)
+    page.goto(HISTORY_URL, wait_until="domcontentloaded")
+    page.get_by_text("Showing invoices", exact=False).wait_for(timeout=30000)
     rows = page.locator("table tbody tr")
     count = rows.count()
     result = []
