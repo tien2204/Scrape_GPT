@@ -1,1 +1,7 @@
-.worktrees/
+chrome_profile/
+*.csv
+bot.log
+__pycache__/
+*.pyc
+.venv/
+venv/
