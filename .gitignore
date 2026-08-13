@@ -1,7 +1,9 @@
 chrome_profile/
 *.csv
 bot.log
+cron.log
 __pycache__/
 *.pyc
 .venv/
 venv/
+.env
