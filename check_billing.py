@@ -4,14 +4,17 @@ from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright
 
 from billing_parser import extract_balance, normalize_invoice_row, is_login_page
-from csv_writer import append_balance_row, merge_invoice_rows
+from csv_writer import append_balance_row, merge_invoice_rows, get_new_invoice_rows
 from browser_scraper import fetch_balance_text, fetch_invoice_rows
+from state import read_state, write_state
+from slack_notifier import post_balance_update, post_error_alert, post_recovery
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROFILE_DIR = os.path.join(BASE_DIR, "chrome_profile")
 BALANCE_CSV = os.path.join(BASE_DIR, "credit_balance_log.csv")
 HISTORY_CSV = os.path.join(BASE_DIR, "billing_history.csv")
 LOG_PATH = os.path.join(BASE_DIR, "bot.log")
+STATE_PATH = os.path.join(BASE_DIR, "state.json")
 
 
 def log_run(log_path: str, success: bool, message: str) -> None:
@@ -21,13 +24,32 @@ def log_run(log_path: str, success: bool, message: str) -> None:
         f.write(f"{timestamp} [{status}] {message}\n")
 
 
+def decide_action(overall_success: bool, state: dict, balance: str | None, new_invoice_rows: list[dict]) -> str:
+    if overall_success and state["last_status"] == "failure":
+        return "recovery"
+    if not overall_success and state["last_status"] == "success":
+        return "error"
+    if overall_success and state["last_status"] == "success":
+        if state["last_balance"] is not None and (balance != state["last_balance"] or new_invoice_rows):
+            return "balance_update"
+    return "none"
+
+
 def run() -> int:
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+
     with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(PROFILE_DIR, headless=True)
+        context = p.chromium.launch_persistent_context(
+            PROFILE_DIR,
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
         page = context.pages[0] if context.pages else context.new_page()
 
         balance_ok = False
         history_ok = False
+        balance = None
+        new_invoice_rows = []
         messages = []
 
         try:
@@ -49,6 +71,7 @@ def run() -> int:
             if is_login_page(page.url):
                 raise RuntimeError("Session expired, run login_setup.py again")
             normalized = [normalize_invoice_row(row) for row in raw_rows]
+            new_invoice_rows = get_new_invoice_rows(HISTORY_CSV, normalized)
             added = merge_invoice_rows(HISTORY_CSV, normalized)
             history_ok = True
             messages.append(f"history: {added} new invoice(s)")
@@ -60,9 +83,23 @@ def run() -> int:
 
         context.close()
 
-        success = balance_ok and history_ok
-        log_run(LOG_PATH, success, "; ".join(messages))
-        return 0 if success else 1
+    overall_success = balance_ok and history_ok
+    state = read_state(STATE_PATH)
+
+    if webhook_url:
+        action = decide_action(overall_success, state, balance, new_invoice_rows)
+        if action == "recovery":
+            post_recovery(webhook_url, balance)
+        elif action == "error":
+            post_error_alert(webhook_url, "; ".join(messages))
+        elif action == "balance_update":
+            post_balance_update(webhook_url, balance, state["last_balance"], new_invoice_rows)
+
+    next_balance = balance if overall_success else state["last_balance"]
+    write_state(STATE_PATH, next_balance, "success" if overall_success else "failure")
+
+    log_run(LOG_PATH, overall_success, "; ".join(messages))
+    return 0 if overall_success else 1
 
 
 if __name__ == "__main__":
