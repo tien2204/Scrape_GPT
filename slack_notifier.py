@@ -29,3 +29,28 @@ def post_error_alert(webhook_url: str, message: str) -> None:
 
 def post_recovery(webhook_url: str, balance: str) -> None:
     _post(webhook_url, f"✅ Billing bot recovered — balance: ${balance}")
+
+
+def _fmt_usd(amount: str) -> str:
+    # fal.ai balances can go negative (postpaid/overdrawn) — "-$5.61" reads
+    # better than "$-5.61".
+    return f"-${amount[1:]}" if amount.startswith("-") else f"${amount}"
+
+
+def post_fal_balance_update(webhook_url: str, balance: str, previous_balance: str | None, new_events: list[dict]) -> None:
+    lines = []
+    if previous_balance is not None and balance != previous_balance:
+        lines.append(f"💰 [fal.ai] Credit balance: {_fmt_usd(balance)} (was {_fmt_usd(previous_balance)})")
+    for event in new_events:
+        lines.append(f"🧾 [fal.ai] Usage: {event['endpoint_id']} — {_fmt_usd(event['cost_total'])}")
+    if not lines:
+        return
+    _post(webhook_url, "\n".join(lines))
+
+
+def post_fal_error_alert(webhook_url: str, message: str) -> None:
+    _post(webhook_url, f"⚠️ [fal.ai] Billing bot failing: {message}")
+
+
+def post_fal_recovery(webhook_url: str, balance: str) -> None:
+    _post(webhook_url, f"✅ [fal.ai] Billing bot recovered — balance: {_fmt_usd(balance)}")

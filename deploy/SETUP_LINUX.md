@@ -36,15 +36,23 @@ server and `scp` only `chrome_profile/` over separately (it's gitignored).
     pip install -r requirements.txt
     playwright install chromium
 
-## 4. Set the Slack webhook URL
+## 4. Set the Slack webhook URL and provider API keys
 
-Cron does not read your shell profile by default, so `SLACK_WEBHOOK_URL`
-needs to be made available to the cron command explicitly. Two options:
+Cron does not read your shell profile by default, so these need to be
+made available to the cron command explicitly. Two options:
 
 **Option A — `.env` file (what `deploy/crontab.txt` uses):** create a
-`.env` file in the project root (never commit it — it's gitignored):
+`.env` file in the project root (never commit it — it's gitignored),
+with LF line endings (a `.env` saved from a Windows editor with CRLF
+endings will silently corrupt the last value on each line — e.g. a
+trailing `\r` inside an API key breaks HTTP headers; run
+`sed -i 's/\r$//' .env` if in doubt):
 
     SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+    FAL_ADMIN_KEY="..."
+
+`FAL_ADMIN_KEY` is optional — if unset, the fal.ai billing check is
+skipped (OpenAI-only mode) rather than failing the run.
 
 and source it in the cron command itself:
 
@@ -131,3 +139,10 @@ At 96 runs/day, `cron.log` grows indefinitely if left alone. Add a
   next to it. `browser_scraper.fetch_balance_text` waits for the `$X.XX`
   text itself (not just the label) to avoid this race; if it recurs, the
   page's DOM structure likely changed.
+- If `bot.log` shows `[fal.ai] fal.ai check failed: Invalid leading
+  whitespace, reserved character(s)... in header value`: `.env` has CRLF
+  line endings (common when a value was pasted from a Windows editor),
+  which leaves a trailing `\r` on `FAL_ADMIN_KEY` that breaks the
+  `Authorization` header. Fix with `sed -i 's/\r$//' .env`; `check_billing.py`
+  also `.strip()`s the key defensively, but the CRLF should still be fixed
+  at the source since other values in the same file are equally affected.

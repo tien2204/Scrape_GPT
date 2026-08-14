@@ -1,6 +1,13 @@
 from unittest.mock import patch, MagicMock
 import requests
-from slack_notifier import post_balance_update, post_error_alert, post_recovery
+from slack_notifier import (
+    post_balance_update,
+    post_error_alert,
+    post_recovery,
+    post_fal_balance_update,
+    post_fal_error_alert,
+    post_fal_recovery,
+)
 
 
 def _mock_response(status_code=200):
@@ -84,3 +91,59 @@ def test_post_balance_update_invoice_line_uses_receipt_emoji(mock_post):
     post_balance_update("https://hooks.example.com/x", "7.99", "7.99", [invoice])
     text = mock_post.call_args.kwargs["json"]["text"]
     assert "\U0001F9FE New invoice: INV-1 — $5.00 — Paid" in text
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_balance_update_sends_balance_change_only(mock_post):
+    mock_post.return_value = _mock_response()
+    post_fal_balance_update("https://hooks.example.com/x", "24.50", "20.00", [])
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert "[fal.ai] Credit balance: $24.50 (was $20.00)" in text
+    assert "Usage" not in text
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_balance_update_formats_negative_balance(mock_post):
+    mock_post.return_value = _mock_response()
+    post_fal_balance_update("https://hooks.example.com/x", "-5.61", "1.00", [])
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert "[fal.ai] Credit balance: -$5.61 (was $1.00)" in text
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_balance_update_sends_event_line(mock_post):
+    mock_post.return_value = _mock_response()
+    event = {"request_id": "REQ-1", "endpoint_id": "fal-ai/flux/dev", "cost_total": "5.5661", "timestamp": "2026-08-07T10:20:05Z"}
+    post_fal_balance_update("https://hooks.example.com/x", "24.50", "24.50", [event])
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert "[fal.ai] Usage: fal-ai/flux/dev — $5.5661" in text
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_balance_update_sends_nothing_when_no_changes(mock_post):
+    post_fal_balance_update("https://hooks.example.com/x", "24.50", "24.50", [])
+    mock_post.assert_not_called()
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_error_alert_sends_correct_message(mock_post):
+    mock_post.return_value = _mock_response()
+    post_fal_error_alert("https://hooks.example.com/x", "fal.ai check failed: timeout")
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert text == "⚠️ [fal.ai] Billing bot failing: fal.ai check failed: timeout"
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_recovery_sends_correct_message(mock_post):
+    mock_post.return_value = _mock_response()
+    post_fal_recovery("https://hooks.example.com/x", "24.50")
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert text == "✅ [fal.ai] Billing bot recovered — balance: $24.50"
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_recovery_formats_negative_balance(mock_post):
+    mock_post.return_value = _mock_response()
+    post_fal_recovery("https://hooks.example.com/x", "-5.61")
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert text == "✅ [fal.ai] Billing bot recovered — balance: -$5.61"
