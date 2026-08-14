@@ -4,9 +4,11 @@ from slack_notifier import (
     post_balance_update,
     post_error_alert,
     post_recovery,
+    post_status,
     post_fal_balance_update,
     post_fal_error_alert,
     post_fal_recovery,
+    post_fal_status,
 )
 
 
@@ -147,3 +149,19 @@ def test_post_fal_recovery_formats_negative_balance(mock_post):
     post_fal_recovery("https://hooks.example.com/x", "-5.61")
     text = mock_post.call_args.kwargs["json"]["text"]
     assert text == "✅ [fal.ai] Billing bot recovered — balance: -$5.61"
+
+
+@patch("slack_notifier.requests.post")
+def test_post_status_sends_correct_message(mock_post):
+    mock_post.return_value = _mock_response()
+    post_status("https://hooks.example.com/x", "7.99")
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert text == "📊 [OpenAI] API credit balance: $7.99"
+
+
+@patch("slack_notifier.requests.post")
+def test_post_fal_status_sends_correct_message(mock_post):
+    mock_post.return_value = _mock_response()
+    post_fal_status("https://hooks.example.com/x", "-5.61")
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert text == "📊 [fal.ai] Credit balance: -$5.61"

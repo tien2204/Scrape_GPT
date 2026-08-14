@@ -18,9 +18,11 @@ from slack_notifier import (
     post_balance_update,
     post_error_alert,
     post_recovery,
+    post_status,
     post_fal_balance_update,
     post_fal_error_alert,
     post_fal_recovery,
+    post_fal_status,
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -136,6 +138,8 @@ def check_fal_billing(webhook_url: str | None) -> bool:
             post_fal_error_alert(webhook_url, message)
         elif action == "balance_update":
             post_fal_balance_update(webhook_url, balance, state["last_balance"], new_event_rows)
+        elif action == "none" and success:
+            post_fal_status(webhook_url, balance)
 
     next_balance = balance if success else state["last_balance"]
     write_state(FAL_STATE_PATH, next_balance, "success" if success else "failure")
@@ -203,6 +207,8 @@ def run() -> int:
             post_error_alert(webhook_url, "; ".join(messages))
         elif action == "balance_update":
             post_balance_update(webhook_url, balance, state["last_balance"], new_invoice_rows)
+        elif action == "none" and overall_success:
+            post_status(webhook_url, balance)
 
     next_balance = balance if overall_success else state["last_balance"]
     write_state(STATE_PATH, next_balance, "success" if overall_success else "failure")

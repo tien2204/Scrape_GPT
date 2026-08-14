@@ -31,6 +31,10 @@ def post_recovery(webhook_url: str, balance: str) -> None:
     _post(webhook_url, f"✅ Billing bot recovered — balance: ${balance}")
 
 
+def post_status(webhook_url: str, balance: str) -> None:
+    _post(webhook_url, f"📊 [OpenAI] API credit balance: ${balance}")
+
+
 def _fmt_usd(amount: str) -> str:
     # fal.ai balances can go negative (postpaid/overdrawn) — "-$5.61" reads
     # better than "$-5.61".
@@ -54,3 +58,7 @@ def post_fal_error_alert(webhook_url: str, message: str) -> None:
 
 def post_fal_recovery(webhook_url: str, balance: str) -> None:
     _post(webhook_url, f"✅ [fal.ai] Billing bot recovered — balance: {_fmt_usd(balance)}")
+
+
+def post_fal_status(webhook_url: str, balance: str) -> None:
+    _post(webhook_url, f"📊 [fal.ai] Credit balance: {_fmt_usd(balance)}")
