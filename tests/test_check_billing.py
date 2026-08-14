@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from check_billing import log_run
 from check_billing import decide_action
 from check_billing import format_fal_timestamp, normalize_fal_event, fetch_fal_balance, fetch_fal_billing_events
+from check_billing import get_low_balance_threshold, check_low_balance
 
 
 def test_log_run_appends_line(tmp_path):
@@ -122,3 +123,34 @@ def test_fetch_fal_billing_events_follows_pagination(mock_get):
     assert events == [{"request_id": "REQ-1"}, {"request_id": "REQ-2"}]
     assert mock_get.call_count == 2
     assert mock_get.call_args_list[1].kwargs["params"]["cursor"] == "page2"
+
+
+def test_get_low_balance_threshold_defaults_to_ten(monkeypatch):
+    monkeypatch.delenv("ALERT_ZERO_BALANCE", raising=False)
+    assert get_low_balance_threshold() == 10.0
+
+
+def test_get_low_balance_threshold_reads_env(monkeypatch):
+    monkeypatch.setenv("ALERT_ZERO_BALANCE", "25.0")
+    assert get_low_balance_threshold() == 25.0
+
+
+@patch("check_billing.post_low_balance_warning")
+def test_check_low_balance_warns_when_below_threshold(mock_post, monkeypatch):
+    monkeypatch.setenv("ALERT_ZERO_BALANCE", "10.0")
+    check_low_balance("https://hooks.example.com/x", "OpenAI", "7.99")
+    mock_post.assert_called_once_with("https://hooks.example.com/x", "OpenAI", "7.99", 10.0)
+
+
+@patch("check_billing.post_low_balance_warning")
+def test_check_low_balance_silent_when_above_threshold(mock_post, monkeypatch):
+    monkeypatch.setenv("ALERT_ZERO_BALANCE", "10.0")
+    check_low_balance("https://hooks.example.com/x", "OpenAI", "15.00")
+    mock_post.assert_not_called()
+
+
+@patch("check_billing.post_low_balance_warning")
+def test_check_low_balance_warns_for_negative_fal_balance(mock_post, monkeypatch):
+    monkeypatch.setenv("ALERT_ZERO_BALANCE", "10.0")
+    check_low_balance("https://hooks.example.com/x", "fal.ai", "-5.61")
+    mock_post.assert_called_once_with("https://hooks.example.com/x", "fal.ai", "-5.61", 10.0)

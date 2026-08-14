@@ -23,6 +23,7 @@ from slack_notifier import (
     post_fal_error_alert,
     post_fal_recovery,
     post_fal_status,
+    post_low_balance_warning,
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -54,6 +55,16 @@ def decide_action(overall_success: bool, state: dict, balance: str | None, new_i
         if state["last_balance"] is not None and (balance != state["last_balance"] or new_invoice_rows):
             return "balance_update"
     return "none"
+
+
+def get_low_balance_threshold() -> float:
+    return float(os.environ.get("ALERT_ZERO_BALANCE", "10.0"))
+
+
+def check_low_balance(webhook_url: str, provider: str, balance: str) -> None:
+    threshold = get_low_balance_threshold()
+    if float(balance) < threshold:
+        post_low_balance_warning(webhook_url, provider, balance, threshold)
 
 
 def format_fal_timestamp(dt: datetime) -> str:
@@ -141,6 +152,9 @@ def check_fal_billing(webhook_url: str | None) -> bool:
         elif action == "none" and success:
             post_fal_status(webhook_url, balance)
 
+        if success:
+            check_low_balance(webhook_url, "fal.ai", balance)
+
     next_balance = balance if success else state["last_balance"]
     write_state(FAL_STATE_PATH, next_balance, "success" if success else "failure")
 
@@ -209,6 +223,9 @@ def run() -> int:
             post_balance_update(webhook_url, balance, state["last_balance"], new_invoice_rows)
         elif action == "none" and overall_success:
             post_status(webhook_url, balance)
+
+        if overall_success:
+            check_low_balance(webhook_url, "OpenAI", balance)
 
     next_balance = balance if overall_success else state["last_balance"]
     write_state(STATE_PATH, next_balance, "success" if overall_success else "failure")

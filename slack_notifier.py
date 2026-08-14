@@ -62,3 +62,10 @@ def post_fal_recovery(webhook_url: str, balance: str) -> None:
 
 def post_fal_status(webhook_url: str, balance: str) -> None:
     _post(webhook_url, f"📊 [fal.ai] Credit balance: {_fmt_usd(balance)}")
+
+
+def post_low_balance_warning(webhook_url: str, provider: str, balance: str, threshold: float) -> None:
+    _post(
+        webhook_url,
+        f"💳 [{provider}] Low balance: {_fmt_usd(balance)} — please top up (threshold: ${threshold:.2f})",
+    )

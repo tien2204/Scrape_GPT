@@ -9,6 +9,7 @@ from slack_notifier import (
     post_fal_error_alert,
     post_fal_recovery,
     post_fal_status,
+    post_low_balance_warning,
 )
 
 
@@ -165,3 +166,19 @@ def test_post_fal_status_sends_correct_message(mock_post):
     post_fal_status("https://hooks.example.com/x", "-5.61")
     text = mock_post.call_args.kwargs["json"]["text"]
     assert text == "📊 [fal.ai] Credit balance: -$5.61"
+
+
+@patch("slack_notifier.requests.post")
+def test_post_low_balance_warning_sends_correct_message(mock_post):
+    mock_post.return_value = _mock_response()
+    post_low_balance_warning("https://hooks.example.com/x", "OpenAI", "7.99", 10.0)
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert text == "💳 [OpenAI] Low balance: $7.99 — please top up (threshold: $10.00)"
+
+
+@patch("slack_notifier.requests.post")
+def test_post_low_balance_warning_formats_negative_balance(mock_post):
+    mock_post.return_value = _mock_response()
+    post_low_balance_warning("https://hooks.example.com/x", "fal.ai", "-5.61", 10.0)
+    text = mock_post.call_args.kwargs["json"]["text"]
+    assert text == "💳 [fal.ai] Low balance: -$5.61 — please top up (threshold: $10.00)"
