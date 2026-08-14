@@ -138,15 +138,17 @@ def test_get_low_balance_threshold_reads_env(monkeypatch):
 @patch("check_billing.post_low_balance_warning")
 def test_check_low_balance_warns_when_below_threshold(mock_post, monkeypatch):
     monkeypatch.setenv("ALERT_ZERO_BALANCE", "10.0")
-    check_low_balance("https://hooks.example.com/x", "OpenAI", "7.99")
+    result = check_low_balance("https://hooks.example.com/x", "OpenAI", "7.99")
     mock_post.assert_called_once_with("https://hooks.example.com/x", "OpenAI", "7.99", 10.0)
+    assert result is True
 
 
 @patch("check_billing.post_low_balance_warning")
 def test_check_low_balance_silent_when_above_threshold(mock_post, monkeypatch):
     monkeypatch.setenv("ALERT_ZERO_BALANCE", "10.0")
-    check_low_balance("https://hooks.example.com/x", "OpenAI", "15.00")
+    result = check_low_balance("https://hooks.example.com/x", "OpenAI", "15.00")
     mock_post.assert_not_called()
+    assert result is False
 
 
 @patch("check_billing.post_low_balance_warning")

@@ -61,10 +61,12 @@ def get_low_balance_threshold() -> float:
     return float(os.environ.get("ALERT_ZERO_BALANCE", "10.0"))
 
 
-def check_low_balance(webhook_url: str, provider: str, balance: str) -> None:
+def check_low_balance(webhook_url: str, provider: str, balance: str) -> bool:
     threshold = get_low_balance_threshold()
-    if float(balance) < threshold:
+    is_low = float(balance) < threshold
+    if is_low:
         post_low_balance_warning(webhook_url, provider, balance, threshold)
+    return is_low
 
 
 def format_fal_timestamp(dt: datetime) -> str:
@@ -143,17 +145,15 @@ def check_fal_billing(webhook_url: str | None) -> bool:
 
     if webhook_url:
         action = decide_action(success, state, balance, new_event_rows)
+        is_low = check_low_balance(webhook_url, "fal.ai", balance) if success else False
         if action == "recovery":
             post_fal_recovery(webhook_url, balance)
         elif action == "error":
             post_fal_error_alert(webhook_url, message)
         elif action == "balance_update":
             post_fal_balance_update(webhook_url, balance, state["last_balance"], new_event_rows)
-        elif action == "none" and success:
+        elif action == "none" and success and not is_low:
             post_fal_status(webhook_url, balance)
-
-        if success:
-            check_low_balance(webhook_url, "fal.ai", balance)
 
     next_balance = balance if success else state["last_balance"]
     write_state(FAL_STATE_PATH, next_balance, "success" if success else "failure")
@@ -215,17 +215,15 @@ def run() -> int:
 
     if webhook_url:
         action = decide_action(overall_success, state, balance, new_invoice_rows)
+        is_low = check_low_balance(webhook_url, "OpenAI", balance) if overall_success else False
         if action == "recovery":
             post_recovery(webhook_url, balance)
         elif action == "error":
             post_error_alert(webhook_url, "; ".join(messages))
         elif action == "balance_update":
             post_balance_update(webhook_url, balance, state["last_balance"], new_invoice_rows)
-        elif action == "none" and overall_success:
+        elif action == "none" and overall_success and not is_low:
             post_status(webhook_url, balance)
-
-        if overall_success:
-            check_low_balance(webhook_url, "OpenAI", balance)
 
     next_balance = balance if overall_success else state["last_balance"]
     write_state(STATE_PATH, next_balance, "success" if overall_success else "failure")
