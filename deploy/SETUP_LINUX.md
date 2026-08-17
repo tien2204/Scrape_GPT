@@ -1,6 +1,6 @@
 # Linux Deployment
 
-This runs the billing bot every 15 minutes on a headless Linux server using
+This runs the billing bot every hour on a headless Linux server using
 a virtual display (Xvfb) so Chrome renders normally (not `--headless`,
 which is reliably blocked by Cloudflare on OpenAI's billing pages).
 
@@ -56,14 +56,14 @@ skipped (OpenAI-only mode) rather than failing the run.
 
 and source it in the cron command itself:
 
-    */15 * * * * cd /path/to/project && set -a && . ./.env && set +a && ./deploy/run_with_xvfb.sh python3 check_billing.py >> cron.log 2>&1
+    0 * * * * cd /path/to/project && set -a && . ./.env && set +a && ./deploy/run_with_xvfb.sh python3 check_billing.py >> cron.log 2>&1
 
 (matches `deploy/crontab.txt` verbatim — edit only the `cd` path)
 
 **Option B — shell profile:** add `export SLACK_WEBHOOK_URL="..."` to
 `~/.bashrc` and prefix the cron command with sourcing it instead:
 
-    */15 * * * * cd /path/to/project && . ~/.bashrc && xvfb-run -a python3 check_billing.py >> cron.log 2>&1
+    0 * * * * cd /path/to/project && . ~/.bashrc && xvfb-run -a python3 check_billing.py >> cron.log 2>&1
 
 ## 5. Verify a manual run works
 
@@ -91,7 +91,7 @@ Verify it's installed:
 
 ## 7. Rotate `cron.log`
 
-At 96 runs/day, `cron.log` grows indefinitely if left alone. Add a
+At 24 runs/day, `cron.log` grows indefinitely if left alone. Add a
 `logrotate` config, e.g. `/etc/logrotate.d/billing-bot`:
 
     /path/to/project/cron.log {
