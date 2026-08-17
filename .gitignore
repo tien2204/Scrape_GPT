@@ -2,6 +2,8 @@ chrome_profile/
 *.csv
 bot.log
 cron.log
+state.json
+state_fal.json
 __pycache__/
 *.pyc
 .venv/
